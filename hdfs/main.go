@@ -2,7 +2,6 @@ package main
 
 import(
 	"github.com/colinmarc/hdfs/v2"
-
 	"flag"
 	"time"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
