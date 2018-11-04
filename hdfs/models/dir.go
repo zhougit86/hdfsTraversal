@@ -2,7 +2,6 @@ package models
 
 import (
 	"time"
-	"os"
 )
 
 type Dir_Inf struct {
@@ -14,12 +13,4 @@ type Dir_Inf struct {
 	Owner string
 }
 
-func NewDir( fi os.FileInfo, path string ) *Dir_Inf{
-	return &Dir_Inf{
-		Path:path+fi.Name(),
-		IsDir:fi.IsDir(),
-		Length:fi.Size(),
-		ModTime:fi.ModTime(),
-		Owner:"nil",
-	}
-}
+

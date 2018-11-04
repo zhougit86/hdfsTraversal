@@ -5,77 +5,119 @@ import(
 
 	"flag"
 	"time"
-	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	"yonghui.com/hdfsTraver/hdfs/models"
 	//"fmt"
-	"bytes"
 	"fmt"
+	"github.com/go-xorm/xorm"
+	"bytes"
+	"math/rand"
 )
 
 var clients chan *hdfs.Client
-var objChannel chan *models.Dir_Inf
-//var clients []*hdfs.Client
+var objChannel chan *models.DirInfo
+var endChannel chan int
+
 var hdfsDest *string
 var rootDir *string
 var mysqlAddr *string
 var clientNum *int
 var sqlConnNum *int
-var db *gorm.DB
+
 
 func init()  {
 	mysqlAddr= flag.String("sql", "root:123@tcp(192.168.13.128:3306)/migration?charset=utf8", "sql:root:123@tcp(192.168.13.128:3306)/migration?charset=utf8")
 	hdfsDest= flag.String("hdfs", "192.168.13.128:9000", "The hdfs you want to connect")
 	rootDir = flag.String("root" ,"/","the directory to start with")
 	clientNum = flag.Int("client",3,"the number of client to hdfs")
-	sqlConnNum = flag.Int("sqlconn",10,"the number of sql conn")
+	sqlConnNum = flag.Int("sqlconn",5,"the number of sql conn")
 }
 
-func Persistence(){
-	buff:=bytes.Buffer{}
-	buff.WriteString("INSERT INTO dir_infs (path,is_dir,length,mod_time) VALUES ")
-	for i:=0;i<4999;i++{
-		buff.WriteString("( ?,?,?,?),")
-	}
-	buff.WriteString("( ?,?,?,?);")
+func batchPersistence(){
+	var db *xorm.Engine
 	var errDb error
-	var objList []interface{} = make([]interface{},5000*4)
+	var objList []*models.DirInfo = make([]*models.DirInfo,0)
 
-	db, errDb = gorm.Open("mysql", *mysqlAddr)
+	db, errDb =  xorm.NewEngine("mysql", *mysqlAddr)
 	if errDb != nil {
 		panic(errDb)
 	}
 	db.DB().SetConnMaxLifetime(2000)
-	if !db.HasTable(&models.Dir_Inf{}){
-		db.CreateTable(&models.Dir_Inf{})
+	exist , _:=db.IsTableExist(models.Dir_Inf{})
+	if !exist{
+		db.CreateTables(models.DirInfo{})
+		db.CreateUniques(models.DirInfo{})
 	}
 
 	defer db.Close()
 	count:=0
 	for{
-		obj:=<-objChannel
-		objList[count*4] = obj.Path
-		objList[count*4+1] = obj.IsDir
-		objList[count*4+2] = obj.Length
-		objList[count*4+3] = obj.ModTime
-		count++
-		if count ==5000{
-			fmt.Println(len(objList))
-			db.Exec(buff.String(),objList...)
-			count=0
-			objList = make([]interface{},5000*4)
+		select {
+		case <- time.After(5 * time.Second):
+			if count>0{
+				fmt.Printf("ending with number %d \n",count)
+				db.Insert(&objList)
+			}
+			return
+		case obj:=<-objChannel:
+			objList = append(objList,obj)
+			count++
+			if count ==150{
+				fmt.Println(len(objList))
+				db.Insert(&objList)
+				count=0
+				objList = make([]*models.DirInfo,0)
+			}
 		}
 		//db.Exec("INSERT INTO dir_infs (path,is_dir,length,mod_time) VALUES ( ?,?,?,?);",nn.Path,nn.IsDir,nn.Length,nn.ModTime,"nilnil")
+	}
+}
+
+func singlePersistence(){
+	var db *xorm.Engine
+	var errDb error
+	selfId:= rand.Int()
+	count:=0
+
+	db, errDb =  xorm.NewEngine("mysql", *mysqlAddr)
+	if errDb != nil {
+		panic(errDb)
+	}
+	db.DB().SetConnMaxLifetime(2000)
+	exist , _:=db.IsTableExist(models.Dir_Inf{})
+	if !exist{
+		db.CreateTables(models.DirInfo{})
+		db.CreateUniques(models.DirInfo{})
+	}
+
+	defer db.Close()
+	fmt.Printf("Id:%d start time:%s\n",selfId,time.Now())
+
+	for{
+		select {
+		case <- time.After(5 * time.Second):
+			fmt.Printf("Id:%d start time:%s,ending with number %d\n",selfId,time.Now(),count)
+			endChannel<-count
+			return
+		case obj:=<-objChannel:
+			_,err:=db.Insert(obj)
+			if err!=nil{
+				fmt.Println(err)
+			}else{
+				count++
+			}
+		}
 	}
 }
 
 func main()  {
 	flag.Parse()
 
-	objChannel=make(chan *models.Dir_Inf,30*(*sqlConnNum))
+	objChannel=make(chan *models.DirInfo,30*(*sqlConnNum))
+	endChannel=make(chan int)
 
 	for i:=0;i<*sqlConnNum;i++{
-		go Persistence()
+		go singlePersistence()
 	}
 	clients = make(chan *hdfs.Client, *clientNum)
 	for i:=0;i<*clientNum;i++{
@@ -87,7 +129,17 @@ func main()  {
 	}
 
 	go traverseDir(*rootDir)
-	time.Sleep(100000*time.Second)
+	finishCount:=0
+	totalItem:=0
+	for{
+		singleFinish:=<-endChannel
+		totalItem+=singleFinish
+		finishCount++
+		if finishCount == *sqlConnNum{
+			fmt.Printf("totally number:%d\n",totalItem)
+			return
+		}
+	}
 }
 
 func traverseDir(input string){
@@ -102,7 +154,12 @@ func traverseDir(input string){
 		nn:=models.NewDir(v,input)
 		objChannel<-nn
 		if (v.IsDir()){
-			go traverseDir(input + v.Name() + "/")
+			buff:=bytes.Buffer{}
+			buff.WriteString(input)
+			buff.WriteString(v.Name())
+			buff.WriteString("/")
+
+			go traverseDir(buff.String())
 		}
 	}
 }
