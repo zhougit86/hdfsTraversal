@@ -29,12 +29,13 @@ func init()  {
 	hdfsDest= flag.String("hdfs", "192.168.13.128:9000", "The hdfs you want to connect")
 	rootDir = flag.String("root" ,"/","the directory to start with")
 	clientNum = flag.Int("client",3,"the number of client to hdfs")
-	sqlConnNum = flag.Int("sqlconn",5,"the number of sql conn")
+	sqlConnNum = flag.Int("sqlconn",30,"the number of sql conn")
 }
 
 func batchPersistence(){
 	var db *xorm.Engine
 	var errDb error
+	selfId:= rand.Int()
 	var objList []*models.DirInfo = make([]*models.DirInfo,0)
 
 	db, errDb =  xorm.NewEngine("mysql", *mysqlAddr)
@@ -45,25 +46,34 @@ func batchPersistence(){
 	exist , _:=db.IsTableExist(models.Dir_Inf{})
 	if !exist{
 		db.CreateTables(models.DirInfo{})
-		db.CreateUniques(models.DirInfo{})
+		//db.CreateUniques(models.DirInfo{})
 	}
-
+	fmt.Printf("Id:%d start time:%s\n",selfId,time.Now())
 	defer db.Close()
 	count:=0
+	total:=0
 	for{
 		select {
 		case <- time.After(5 * time.Second):
-			if count>0{
-				fmt.Printf("ending with number %d \n",count)
-				db.Insert(&objList)
+
+			total+=count
+			fmt.Printf("Id:%d start time:%s,ending with number %d\n",selfId,time.Now(),total)
+			_,err:=db.Insert(&objList)
+			if err!=nil{
+				fmt.Println(err)
 			}
+			endChannel<-total
+
 			return
 		case obj:=<-objChannel:
 			objList = append(objList,obj)
 			count++
 			if count ==150{
-				fmt.Println(len(objList))
-				db.Insert(&objList)
+				_,err:=db.Insert(&objList)
+				if err!=nil{
+					fmt.Println(err)
+				}
+				total+=count
 				count=0
 				objList = make([]*models.DirInfo,0)
 			}
@@ -116,7 +126,7 @@ func main()  {
 	endChannel=make(chan int)
 
 	for i:=0;i<*sqlConnNum;i++{
-		go singlePersistence()
+		go batchPersistence()
 	}
 	clients = make(chan *hdfs.Client, *clientNum)
 	for i:=0;i<*clientNum;i++{

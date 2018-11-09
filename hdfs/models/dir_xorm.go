@@ -8,7 +8,7 @@ import (
 
 type DirInfo struct {
 	Id int64 `xorm:"pk autoincr notnull"`
-	Path string `xorm:"varchar(100) notnull unique 'path'"`
+	Path string `xorm:"notnull unique 'path'"`
 	IsDir bool
 	Length int64
 	ModTime time.Time
