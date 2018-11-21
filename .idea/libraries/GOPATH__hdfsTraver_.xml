@@ -4,12 +4,14 @@
       <root url="file://$PROJECT_DIR$/../../gopkg.in" />
       <root url="file://$PROJECT_DIR$/../../github.com" />
       <root url="file://$PROJECT_DIR$/.." />
+      <root url="file://$PROJECT_DIR$/../../cloud.google.com" />
     </CLASSES>
     <JAVADOC />
     <SOURCES>
       <root url="file://$PROJECT_DIR$/../../gopkg.in" />
       <root url="file://$PROJECT_DIR$/../../github.com" />
       <root url="file://$PROJECT_DIR$/.." />
+      <root url="file://$PROJECT_DIR$/../../cloud.google.com" />
     </SOURCES>
     <excluded>
       <root url="file://$PROJECT_DIR$" />

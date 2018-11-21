@@ -161,7 +161,8 @@ func traverseDir(input string){
 	for _,v := range fInfo{
 		//fmt.Println(input + v.Name())
 		nn:=models.NewDir(v,input)
-		objChannel<-nn
+		fmt.Println(nn)
+		//objChannel<-nn
 		if (v.IsDir()){
 			buff:=bytes.Buffer{}
 			buff.WriteString(input)
