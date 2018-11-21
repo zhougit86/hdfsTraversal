@@ -30,7 +30,7 @@ func exec_shell(s *models.SyncItem,ngin *xorm.Engine) (string, error){
 		dirChan <- ngin
 		return out.String(), fmt.Errorf("%s:%s",s.Path,err)
 	}
-	ngin.Table(new(models.SyncItem)).Id(s.Id).Update(map[string]interface{}{"stage":1})
+	ngin.Table(new(models.SyncItem)).Id(s.Id).Update(map[string]interface{}{"stage":2})
 	dirChan <- ngin
 	return out.String(),nil
 
@@ -43,7 +43,7 @@ func main() {
 		fmt.Printf("create db conn error:%s\n",error)
 	}
 	pEveryOne := make([]*models.SyncItem, 0)
-	err := engineRecord.Where("mission_type = ? and stage = ?",0,0).Find(&pEveryOne)
+	err := engineRecord.Where("mission_type = ? and stage=?",0,1).Find(&pEveryOne)
 	if err!=nil{
 		fmt.Println(err)
 	}
