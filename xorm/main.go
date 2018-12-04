@@ -16,7 +16,7 @@ import (
 var tableList []string
 
 //var engine *xorm.Engine
-var engineRecord *xorm.Engine
+//var engineRecord *xorm.Engine
 
 var nowTime time.Time
 var hdfsDest *string
@@ -43,6 +43,20 @@ func init()  {
 
 	nowTime = time.Now()
 	tableList = []string{
+		"catg_change_dtl_fct",
+		"catg_goods_active_change_fct",
+		"catg_goods_change_fct",
+		"catg_goods_rp_flag_fct",
+		"catg_goods_statu_change_fct",
+		"catg_logistics_wstg_fct",
+		"catg_main_goods_trans_fct",
+		"catg_organic_wstg_fct",
+		"catg_sku_askcompensationlist_fct",
+		"catg_sku_loss_fct",
+		"catg_sku_stktakepl_fct",
+		"catg_sku_stkvalueadj_fct",
+		"catg_sku_wstg_fct",
+		"catg_split_rlt_fct",
 		"fin_acct_g2_dept_mon",
 		"fin_card_balance_chloy_fct",
 		"fin_card_balance_fct",
@@ -62,6 +76,15 @@ func init()  {
 		"fin_vendor_backend_income_fct",
 		"fin_vendor_catg_m_backend_income_fct",
 		"hep_fin_statement_head_fct",
+		"hrm_attendance_fct",
+		"hrm_cashier_quality_fct",
+		"hrm_clerk_efficient_rpt",
+		"hrm_cs_attendance_fct",
+		"hrm_cs_cashier_stat_fct",
+		"hrm_cs_cosurety_fct",
+		"hrm_cs_horgunit_fct",
+		"hrm_cs_work_hrs_fct",
+		"hrm_person_info_fct",
 		"inv_class_dos_fct",
 		"inv_detail_account_fct",
 		"inv_dtl_acct_goods_latest",
@@ -76,6 +99,14 @@ func init()  {
 		"inv_stat_mon",
 		"inv_tax_amt",
 		"inv_transfer_fct",
+		//"member_feature_belong_shop_fct",
+		//"member_feature_consume_analysis",
+		//"member_feature_first_shop_fct",
+		//"member_feature_goods_analysis",
+		//"member_feature_recent_shop_fct",
+		//"member_feature_shop_analysis",
+		//"member_feature_stage_analysis",
+		//"member_feature_time_period_analysis",
 		"mkt_pro_channel_fct",
 		"mkt_pro_evt_cust_fct",
 		"mkt_pro_evt_detail_fct",
@@ -105,6 +136,60 @@ func init()  {
 		"sale_shopping_card_item_fct",
 		"sale_stat_dly",
 		"sale_stat_mon",
+		"shop_all_custflow_dly",
+		"shop_bd_custflow_hour",
+		"shop_catg_l_custflow_hour",
+		"shop_catg_m_custflow_hour",
+		"shop_catg_s_custflow_hour",
+		"shop_code_scan_mon",
+		"shop_custflow_bd_custflow",
+		"shop_custflow_bd_custflow_hour",
+		"shop_custflow_bd_custflow_hour_update",
+		"shop_custflow_hour",
+		"shop_dept_custflow_hour",
+		"shop_dept_custflow_hour_test",
+		"shop_dept_custflow_hour_time",
+		"shop_dept_custflow_hour_time_update",
+		"shop_dept_custflow_hour_time_update_test",
+		"shop_div_custflow_hour",
+		"shop_firm_bd_custflow_hour",
+		"shop_firm_dept_skus_hour",
+		"shop_firm_g1_custflow_hour",
+		"shop_firm_g2_custflow_hour",
+		"shop_goods_custflow_dly",
+		"shop_goods_custflow_mon",
+		"shop_goods_fct",
+		"shop_goods_fct_main_goods",
+		"shop_new_bd_custflow_dly",
+		"shop_sap_custflow_fct",
+		"supp_cop_delivery_fct",
+		"supp_dc_order_fct",
+		"supp_delivery_amt_fct",
+		"supp_delivery_fct",
+		"supp_inv_fct",
+		"supp_inv_item",
+		"supp_inv_item_return",
+		"supp_inv_sheet_type",
+		"supp_inv_transaction_fct",
+		"supp_inv_transaction_fct_item",
+		"supp_inv_txn_action_type",
+		"supp_material_use_fct",
+		"supp_move_task_fct",
+		"supp_online_ret_dtl_fct",
+		"supp_online_sale_dtl_fct",
+		"supp_pack_receipt_fct",
+		"supp_pur_check_fct",
+		"supp_pur_fct",
+		"supp_pur_sale_sts_fct",
+		"supp_receipt_fct",
+		"supp_receipt_ret_fct",
+		"supp_sap_delivery_fct",
+		"supp_sap_pur_order_fct",
+		"supp_sap_pur_order_his_fct",
+		"supp_sap_pur_plan_fct",
+		"supp_sap_vendor_pur_ret_fct",
+		"supp_transfer_fct",
+		"supp_upi_receipt_fct",
 	}
 }
 
@@ -189,7 +274,7 @@ func (t *tableChecker) addUnexpect(input string){
 //生成一个Checker
 func NewTableChecker(tableName string) (*tableChecker,error){
 	fmt.Println("begin check:"+tableName)
-	engine, error := xorm.NewEngine("mysql", "root:metadata@Tbds.com@tcp(10.216.126.151:3306)/hive?charset=utf8")
+	engine, error := xorm.NewEngine("mysql", "root:metadata@Tbds.com@tcp(10.216.126.151:3306)/hive_back?charset=utf8")
 	defer engine.Close()
 	if error!=nil{
 		return nil,fmt.Errorf("%s got error:%s",tableName,error)
@@ -219,7 +304,7 @@ func NewTableChecker(tableName string) (*tableChecker,error){
 	}
 	effectivePath := sdid.Location[len("hdfs://hdfsCluster"):]
 
-	engineRecord, error = xorm.NewEngine("mysql", "root:DataLake_Yonghui1@tcp(10.216.155.15:3306)/migration?charset=utf8")
+	engineRecord, error := xorm.NewEngine("mysql", "root:DataLake_Yonghui1@tcp(10.216.155.15:3306)/migration?charset=utf8")
 	if error!=nil{
 		return nil,fmt.Errorf("%s create db conn error:%s",tableName,error)
 	}
@@ -292,14 +377,14 @@ func (t *tableChecker)persistent() error{
 	for len(t.syncItemSlice)>200{
 		inserting := make([]*models.SyncItem,200)
 		copy(inserting,t.syncItemSlice[:200])
-		_,err:=engineRecord.Insert(&inserting)
+		_,err:=t.writeEngine.Insert(&inserting)
 		if err!=nil{
 			return fmt.Errorf("%s insert err: %s",t.effectivePath,err)
 		}
 		t.syncItemSlice = t.syncItemSlice[200:]
 	}
 	if len(t.syncItemSlice)!=0{
-		_,err:=engineRecord.Insert(&t.syncItemSlice)
+		_,err:=t.writeEngine.Insert(&t.syncItemSlice)
 		if err!=nil{
 			return err
 		}
@@ -335,6 +420,9 @@ func generateMap(input []os.FileInfo) (map[string]os.FileInfo,int){
 
 	var isDir bool
 	for i,v :=range input{
+		if strings.Index(v.Name(),".schemas")>=0{
+			continue
+		}
 		if(i==0){
 			isDir=v.IsDir()
 		}

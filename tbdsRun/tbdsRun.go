@@ -8,13 +8,14 @@ import (
 	"bytes"
 	"os/exec"
 	"sync"
+	"time"
 )
 
 var dirChan chan *xorm.Engine
 
-func exec_shell(s *models.SyncItem,ngin *xorm.Engine) (string, error){
+func exec_shell(s *models.SyncItemOds,ngin *xorm.Engine) (string, error){
 	//函数返回一个*Cmd，用于使用给出的参数执行name指定的程序
-	cmd := exec.Command("java", "-jar" ,"/home/zhouxiaogang/hadoopMig-1.0-SNAPSHOT.jar" , s.Path)
+	cmd := exec.Command("java", "-jar" ,"/home/zhouxiaogang/tbdsUncompress-1.0-SNAPSHOT.jar" , s.Path)
 
 	//读取io.Writer类型的cmd.Stdout，再通过bytes.Buffer(缓冲byte类型的缓冲器)将byte类型转化为string类型(out.String():这是bytes类型提供的接口)
 	var out bytes.Buffer
@@ -30,19 +31,19 @@ func exec_shell(s *models.SyncItem,ngin *xorm.Engine) (string, error){
 		dirChan <- ngin
 		return out.String(), fmt.Errorf("%s:%s",s.Path,err)
 	}
-	ngin.Table(new(models.SyncItem)).Id(s.Id).Update(map[string]interface{}{"stage":2})
+	ngin.Table(new(models.SyncItemOds)).Id(s.Id).Update(map[string]interface{}{"stage":2})
 	dirChan <- ngin
 	return out.String(),nil
 
 }
 
-func main() {
+func oneLoop() {
 	engineRecord, error := xorm.NewEngine("mysql", "root:DataLake_Yonghui1@tcp(10.216.155.15:3306)/migration?charset=utf8")
 	defer engineRecord.Close()
 	if error!=nil{
 		fmt.Printf("create db conn error:%s\n",error)
 	}
-	pEveryOne := make([]*models.SyncItem, 0)
+	pEveryOne := make([]*models.SyncItemOds, 0)
 	err := engineRecord.Where("mission_type = ? and stage=?",0,1).Find(&pEveryOne)
 	if err!=nil{
 		fmt.Println(err)
@@ -76,3 +77,13 @@ func main() {
 	}()
 	wg.Wait()
 }
+
+func main(){
+	for{
+		fmt.Printf("start loop: %s\n",time.Now())
+		oneLoop()
+		fmt.Printf("stop loop:  %s\n",time.Now())
+		time.Sleep(20*time.Minute)
+	}
+}
+
