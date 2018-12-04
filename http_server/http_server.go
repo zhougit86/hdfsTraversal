@@ -11,16 +11,24 @@ import (
 	"github.com/go-xorm/xorm"
 	"os"
 	"strconv"
+	"os/exec"
 )
 
-var engine *xorm.Engine
+var(
+	dirChan chan *JobRecord
+	engine *xorm.Engine
+)
 
 const (
 	url = "/rest/sync_item/"
+
 	Accepted  = "accepted"
 	Fail  = "fail"
 	Running  = "running"
 	Finish  = "finish"
+
+	sourceBin = "/home/zhouxiaogang/XXX"
+	targetBin = "/home/zhouxiaogang/YYY"
 )
 
 func GoStdTime()string{
@@ -165,10 +173,66 @@ func main() {
 		}
 		engine.CreateUniques(GroupRecord{})
 	}
+	dirChan = make(chan *JobRecord,6)
+	for i:=0;i<6;i++{
+		go exec_shell()
+	}
+
+	//开始从数据库中获取信息
+	go func(){
+		for{
+			fmt.Printf("start loop: %s\n",time.Now())
+			oneLoop()
+			fmt.Printf("stop loop:  %s\n",time.Now())
+			time.Sleep(5*time.Minute)
+		}
+	}()
 
 	http.HandleFunc(url, route)
 	ret := http.ListenAndServe(":8080", nil)
 	fmt.Println(ret)
+}
+
+func oneLoop() {
+	pEveryOne := make([]*JobRecord, 0)
+	err := engine.Where("status = ? ",Accepted).Find(&pEveryOne)
+	if err!=nil{
+		fmt.Println(err)
+		return
+	}
+
+	for _,v :=range pEveryOne{
+		fmt.Printf("%s:%s\n",v,time.Now())
+		dirChan<-v
+	}
+}
+
+func exec_shell() {
+	for{
+		jRec := <-dirChan
+		//函数返回一个*Cmd，用于使用给出的参数执行name指定的程序
+		cmd := exec.Command("java", "-jar" ,sourceBin , jRec.Location)
+		//Run执行c包含的命令，并阻塞直到完成。  这里stdout被取出，cmd.Wait()无法正确获取stdin,stdout,stderr，则阻塞在那了
+		err := cmd.Run()
+
+		if err!=nil{
+			fmt.Println(fmt.Errorf("%s:%s",jRec.Location,err))
+			engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Fail})
+			continue
+		}
+		cmd1 := exec.Command("java", "-jar" ,targetBin , jRec.Location)
+		//Run执行c包含的命令，并阻塞直到完成。  这里stdout被取出，cmd.Wait()无法正确获取stdin,stdout,stderr，则阻塞在那了
+		err = cmd1.Run()
+
+		if err!=nil{
+			fmt.Println(fmt.Errorf("%s:%s",jRec.Location,err))
+			engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Fail})
+			continue
+		}
+		//fmt.Println(sourceBin)
+		//fmt.Println(targetBin)
+		engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Finish})
+	}
 }
 
 func route(w http.ResponseWriter, r *http.Request) {
