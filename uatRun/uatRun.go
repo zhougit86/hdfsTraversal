@@ -12,9 +12,9 @@ import (
 
 var dirChan chan *xorm.Engine
 
-func exec_shell(s *models.SyncItemOds,ngin *xorm.Engine) (string, error){
+func exec_shell(s *models.SyncItem,ngin *xorm.Engine) (string, error){
 	//函数返回一个*Cmd，用于使用给出的参数执行name指定的程序
-	cmd := exec.Command("java", "-jar" ,"/home/zhouxiaogang/hadoopMig-1.0-SNAPSHOT.jar" , s.Path)
+	cmd := exec.Command("java", "-jar" ,"/home/tanwei/hadoopMig-1.0-SNAPSHOT.jar" , s.Path)
 
 	//读取io.Writer类型的cmd.Stdout，再通过bytes.Buffer(缓冲byte类型的缓冲器)将byte类型转化为string类型(out.String():这是bytes类型提供的接口)
 	var out bytes.Buffer
@@ -30,7 +30,7 @@ func exec_shell(s *models.SyncItemOds,ngin *xorm.Engine) (string, error){
 		dirChan <- ngin
 		return out.String(), fmt.Errorf("%s:%s",s.Path,err)
 	}
-	ngin.Table(new(models.SyncItemOds)).Id(s.Id).Update(map[string]interface{}{"stage":1})
+	ngin.Table(new(models.SyncItem)).Id(s.Id).Update(map[string]interface{}{"stage":1})
 	dirChan <- ngin
 	return out.String(),nil
 
@@ -42,7 +42,7 @@ func main() {
 	if error!=nil{
 		fmt.Printf("create db conn error:%s\n",error)
 	}
-	pEveryOne := make([]*models.SyncItemOds, 0)
+	pEveryOne := make([]*models.SyncItem, 0)
 	err := engineRecord.Where("mission_type = ? and stage = ?",0,0).Find(&pEveryOne)
 	if err!=nil{
 		fmt.Println(err)

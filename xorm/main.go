@@ -21,6 +21,7 @@ var tableList []string
 var nowTime time.Time
 var hdfsDest *string
 var tbdsDest *string
+var targetDir *string
 var clientNum *int
 
 const (
@@ -37,8 +38,9 @@ const (
 )
 
 func init()  {
-	hdfsDest= flag.String("hdfs", "10.1.53.205:8020", "The hdfs you want to connect")
+	hdfsDest= flag.String("hdfs", "10.1.53.24:8020", "The hdfs you want to connect")
 	tbdsDest= flag.String("tbds", "10.216.126.151:8020", "The tbds you want to connect")
+	targetDir = flag.String("target", "#", "The destination to start with")
 	clientNum = flag.Int("client",3,"the number of client to hdfs")
 
 	nowTime = time.Now()
@@ -195,21 +197,24 @@ func init()  {
 
 func main(){
 	flag.Parse()
-	for _,v := range tableList{
+	if *targetDir == "#"{
+		panic("please input a valid path :)")
+	}
+
 		//rootWg :=sync.WaitGroup{}
 		//rootWg.Add(1)
-		checker,err := NewTableChecker(v)
-		if err!=nil{
-			fmt.Println(err)
-			continue
-		}
-		go checker.acceptItem()
-		checker.traverseDir(checker.effectivePath+"/")
-		err = checker.persistent()
-		if err!=nil{
-			fmt.Println(err)
-		}
+	checker,err := NewTableChecker(*targetDir)
+	if err!=nil{
+		fmt.Println(err)
+		panic("not valid path")
 	}
+	go checker.acceptItem()
+	checker.traverseDir(checker.effectivePath+"/")
+	err = checker.persistent()
+	if err!=nil{
+		fmt.Println(err)
+	}
+
 }
 
 type tableChecker struct {
@@ -272,41 +277,13 @@ func (t *tableChecker) addUnexpect(input string){
 }
 
 //生成一个Checker
-func NewTableChecker(tableName string) (*tableChecker,error){
-	fmt.Println("begin check:"+tableName)
-	engine, error := xorm.NewEngine("mysql", "root:metadata@Tbds.com@tcp(10.216.126.151:3306)/hive_back?charset=utf8")
-	defer engine.Close()
-	if error!=nil{
-		return nil,fmt.Errorf("%s got error:%s",tableName,error)
-	}
+func NewTableChecker(pathName string) (*tableChecker,error){
 
-	//19935是代表DW这个db的地址
-	tlbs:= &models.Tbls{TblName:tableName,DbId:19935}
-	has ,err :=engine.Get(tlbs)
-	if (!has){
-		return nil,fmt.Errorf("%s not exists1",tableName)
-	}
-	if(err!=nil){
-		return nil,fmt.Errorf("%s not exists2",tableName)
-	}
-	//fmt.Println(tlbs.SdId)
-	sdid := &models.Sds{SdId:tlbs.SdId}
-	has,err = engine.Get(sdid)
-	if (!has){
-		return nil,fmt.Errorf("%s not exists3",tableName)
-	}
-	if(err!=nil){
-		return nil,fmt.Errorf("%s not exists4",tableName)
-	}
-
-	if(strings.Index(sdid.Location,"hdfs://hdfsCluster")<0){
-		return nil,fmt.Errorf("%s can not parse path:%s",tableName,sdid.Location)
-	}
-	effectivePath := sdid.Location[len("hdfs://hdfsCluster"):]
+	effectivePath := strings.TrimRight(pathName,"/")
 
 	engineRecord, error := xorm.NewEngine("mysql", "root:DataLake_Yonghui1@tcp(10.216.155.15:3306)/migration?charset=utf8")
 	if error!=nil{
-		return nil,fmt.Errorf("%s create db conn error:%s",tableName,error)
+		return nil,fmt.Errorf("%s create db conn error:%s",effectivePath,error)
 	}
 
 	fmt.Println(effectivePath)
@@ -314,7 +291,7 @@ func NewTableChecker(tableName string) (*tableChecker,error){
 	if !exist{
 		error :=engineRecord.CreateTables(models.SyncItem{})
 		if error!=nil{
-			return nil,fmt.Errorf("%s create table error:%s",tableName,error)
+			return nil,fmt.Errorf("%s create table error:%s",effectivePath,error)
 		}
 		//error =engineRecord.CreateUniques(SyncItem{})
 		//if error!=nil{
@@ -326,7 +303,7 @@ func NewTableChecker(tableName string) (*tableChecker,error){
 	for i:=0;i<*clientNum;i++{
 		client, err := hdfs.New(*tbdsDest)
 		if err!=nil{
-			return nil,fmt.Errorf("%s get tbds client fail:%s",tableName,error)
+			return nil,fmt.Errorf("%s get tbds client fail:%s",effectivePath,error)
 		}
 		tClients<-client
 	}
@@ -334,7 +311,7 @@ func NewTableChecker(tableName string) (*tableChecker,error){
 	for i:=0;i<*clientNum;i++{
 		client, err := hdfs.New(*hdfsDest)
 		if err!=nil{
-			return nil,fmt.Errorf("%s get uat client fail:%s",tableName,error)
+			return nil,fmt.Errorf("%s get uat client fail:%s",effectivePath,error)
 		}
 		uClients<-client
 	}
@@ -444,6 +421,7 @@ func (t *tableChecker) traverseDir(input string){
 	//Todo:判一下error的类型,事实上UAT上肯定有这个目录，不用判这个错
 	if err!=nil{
 		//如果在UAT没有则需要删除他
+		fmt.Printf("%s:%s\n",err,input)
 		t.addUnexpect(input)
 		t.uatClients<-uatClient
 		return
@@ -451,7 +429,7 @@ func (t *tableChecker) traverseDir(input string){
 	t.uatClients<-uatClient
 
 	tbdsClient:=<-t.tbdsClients
-	TbdsFileInfo,err :=  tbdsClient.ReadDir(input)
+	TbdsFileInfo,err :=  tbdsClient.ReadDir(strings.Replace(input,"/user/hive/warehouse","/apps/hive/warehouse",1))
 	//Todo:判一下error的类型
 	if err!=nil{
 		//如果在TBDS那边没有这个目录，就意味着需要从福州同步这个目录
@@ -484,6 +462,7 @@ func (t *tableChecker) traverseDir(input string){
 
 	//如果判下来两者的类型不同就需要报错
 	if(dstType!=sourceType){
+		fmt.Println("got different type: "+input)
 		t.addUnexpect(input)
 	}
 
@@ -493,7 +472,7 @@ func (t *tableChecker) traverseDir(input string){
 		//遍历源端的目录，当目标端缺少某个文件或者判定文件不一致，就要同步该父级目录
 		for k,v :=range sourceMap{
 			//fmt.Println(input + ":file:" +v.Name())
-			dstCounterPart,ok:=dstMap[k]
+			dstCounterPart,ok:=dstMap[strings.Replace(k,"/user/hive/warehouse","/apps/hive/warehouse",1)]
 			if !ok{
 				t.addUpdate(input)
 				unIdentical = true

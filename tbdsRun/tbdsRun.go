@@ -9,11 +9,33 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+	"github.com/colinmarc/hdfs/v2"
+	"flag"
 )
 
+var tbdsDest *string
 var dirChan chan *xorm.Engine
 
-func exec_shell(s *models.SyncItemOds,ngin *xorm.Engine) (string, error){
+func init(){
+	tbdsDest= flag.String("tbds", "10.216.126.151:8020", "The tbds you want to connect")
+}
+
+func exec_shell(s *models.SyncItem,ngin *xorm.Engine) (string, error){
+	if s.MissionType==1{
+		uatClient, _:=hdfs.New(*tbdsDest)
+		if uatClient==nil{
+			panic("wrong tbds Destination"+*tbdsDest)
+		}
+		err :=  uatClient.Remove(s.Path)
+		if err!=nil{
+			dirChan <- ngin
+			return s.Path+":delete fail", fmt.Errorf("%s:%s",s.Path,err)
+		}
+		ngin.Table(new(models.SyncItem)).Id(s.Id).Update(map[string]interface{}{"stage":2})
+		dirChan <- ngin
+		return s.Path+":deleted",nil
+	}
+
 	//函数返回一个*Cmd，用于使用给出的参数执行name指定的程序
 	cmd := exec.Command("java", "-jar" ,"/home/zhouxiaogang/tbdsUncompress-1.0-SNAPSHOT.jar" , s.Path)
 
@@ -31,7 +53,7 @@ func exec_shell(s *models.SyncItemOds,ngin *xorm.Engine) (string, error){
 		dirChan <- ngin
 		return out.String(), fmt.Errorf("%s:%s",s.Path,err)
 	}
-	ngin.Table(new(models.SyncItemOds)).Id(s.Id).Update(map[string]interface{}{"stage":2})
+	ngin.Table(new(models.SyncItem)).Id(s.Id).Update(map[string]interface{}{"stage":2})
 	dirChan <- ngin
 	return out.String(),nil
 
@@ -43,11 +65,19 @@ func oneLoop() {
 	if error!=nil{
 		fmt.Printf("create db conn error:%s\n",error)
 	}
-	pEveryOne := make([]*models.SyncItemOds, 0)
+	pEveryOne := make([]*models.SyncItem, 0)
 	err := engineRecord.Where("mission_type = ? and stage=?",0,1).Find(&pEveryOne)
 	if err!=nil{
 		fmt.Println(err)
 	}
+
+	pEveryDelete := make([]*models.SyncItem, 0)
+	err = engineRecord.Where("mission_type = ? ",1).Find(&pEveryDelete)
+	if err!=nil{
+		fmt.Println(err)
+	}
+
+	pEveryOne = append(pEveryOne,pEveryDelete...)
 
 	dirChan = make(chan *xorm.Engine,6)
 	for i:=0;i<6;i++{

@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"os/exec"
+	"sync"
 )
 
 var(
@@ -27,8 +28,8 @@ const (
 	Running  = "running"
 	Finish  = "finish"
 
-	sourceBin = "/home/zhouxiaogang/XXX"
-	targetBin = "/home/zhouxiaogang/YYY"
+	sourceBin = "/home/zhouxiaogang/hadoopMig-1.0-SNAPSHOT.jar"
+	targetBin = "/home/zhouxiaogang/tbdsUncompress-1.0-SNAPSHOT.jar"
 )
 
 func GoStdTime()string{
@@ -173,10 +174,7 @@ func main() {
 		}
 		engine.CreateUniques(GroupRecord{})
 	}
-	dirChan = make(chan *JobRecord,6)
-	for i:=0;i<6;i++{
-		go exec_shell()
-	}
+	dirChan = make(chan *JobRecord,0)
 
 	//开始从数据库中获取信息
 	go func(){
@@ -189,11 +187,12 @@ func main() {
 	}()
 
 	http.HandleFunc(url, route)
-	ret := http.ListenAndServe(":8080", nil)
+	ret := http.ListenAndServe(":9393", nil)
 	fmt.Println(ret)
 }
 
 func oneLoop() {
+	commonWg := &sync.WaitGroup{}
 	pEveryOne := make([]*JobRecord, 0)
 	err := engine.Where("status = ? ",Accepted).Find(&pEveryOne)
 	if err!=nil{
@@ -201,37 +200,55 @@ func oneLoop() {
 		return
 	}
 
+	for i:=0;i<6;i++{
+		commonWg.Add(1)
+		fmt.Println("start the loop")
+		go exec_shell(commonWg)
+	}
+
 	for _,v :=range pEveryOne{
 		fmt.Printf("%s:%s\n",v,time.Now())
 		dirChan<-v
 	}
+
+	fmt.Println("loop wait")
+	commonWg.Wait()
+	fmt.Println("loop finish")
+	return
 }
 
-func exec_shell() {
+func exec_shell(wg *sync.WaitGroup) {
 	for{
-		jRec := <-dirChan
-		//函数返回一个*Cmd，用于使用给出的参数执行name指定的程序
-		cmd := exec.Command("java", "-jar" ,sourceBin , jRec.Location)
-		//Run执行c包含的命令，并阻塞直到完成。  这里stdout被取出，cmd.Wait()无法正确获取stdin,stdout,stderr，则阻塞在那了
-		err := cmd.Run()
+		select {
+		case <- time.After(5 * time.Second):
+			wg.Done()
+			fmt.Println("finished loop")
+			return
 
-		if err!=nil{
-			fmt.Println(fmt.Errorf("%s:%s",jRec.Location,err))
-			engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Fail})
-			continue
-		}
-		cmd1 := exec.Command("java", "-jar" ,targetBin , jRec.Location)
-		//Run执行c包含的命令，并阻塞直到完成。  这里stdout被取出，cmd.Wait()无法正确获取stdin,stdout,stderr，则阻塞在那了
-		err = cmd1.Run()
+		case jRec := <-dirChan:
+			//函数返回一个*Cmd，用于使用给出的参数执行name指定的程序
+			cmd := exec.Command("java", "-jar" ,sourceBin , jRec.Location)
+			//Run执行c包含的命令，并阻塞直到完成。  这里stdout被取出，cmd.Wait()无法正确获取stdin,stdout,stderr，则阻塞在那了
+			err := cmd.Run()
 
-		if err!=nil{
-			fmt.Println(fmt.Errorf("%s:%s",jRec.Location,err))
-			engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Fail})
-			continue
+			if err!=nil{
+				fmt.Println(fmt.Errorf("%s:%s",jRec.Location,err))
+				engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Fail})
+				continue
+			}
+			cmd1 := exec.Command("java", "-jar" ,targetBin , jRec.Location)
+			//Run执行c包含的命令，并阻塞直到完成。  这里stdout被取出，cmd.Wait()无法正确获取stdin,stdout,stderr，则阻塞在那了
+			err = cmd1.Run()
+
+			if err!=nil{
+				fmt.Println(fmt.Errorf("%s:%s",jRec.Location,err))
+				engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Fail})
+				continue
+			}
+			//fmt.Println(sourceBin)
+			//fmt.Println(targetBin)
+			engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Finish})
 		}
-		//fmt.Println(sourceBin)
-		//fmt.Println(targetBin)
-		engine.Table(new(JobRecord)).Id(jRec.Id).Update(map[string]interface{}{"status":Finish})
 	}
 }
 
